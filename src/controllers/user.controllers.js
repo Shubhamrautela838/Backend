@@ -1,6 +1,26 @@
 
 import {User} from "../models/user.models.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
+import jwt from "jsonwebtoken"
+
+
+
+  const getAccessTokenAndRefreshToken = async(userId) =>{
+    try {
+        const user = await User.findById(userId)
+        const accessToken = user.generateAccessToken()
+        const refreshToken = user.generateRefreshToken()
+
+        user.refreshToken = refreshToken
+        await user.save({ validateBeforeSave: false })
+
+        return {accessToken, refreshToken}
+
+
+    } catch (error) {
+        return res.status(500).json({message: "Something went wrong while generating referesh and access token"})
+    }
+}
 const registerUser= async(req,res)=> {
    try{
       const {fullName, email, username, password } = req.body
@@ -96,4 +116,153 @@ const registerUser= async(req,res)=> {
 
 };
 
-export {registerUser}
+const loginUser = async (req, res) =>{
+    try{
+   
+
+    const {email, username, password} = req.body
+    
+
+    if (!username && !email) {
+         return res.status(400).json({message:"username or email are required"})
+    }
+    
+    
+
+    const user = await User.findOne({
+        $or: [{username}, {email}]
+    })
+  
+
+    if (!user) {
+        res.status(400).json({message:"user not found"})
+    }
+
+   const isPasswordValid = await user.isPasswordCorrect(password)
+   
+
+   if (!isPasswordValid) {
+     return res.status(400).json({message:"password is incorrect"})
+    }
+
+   const {accessToken, refreshToken} = await getAccessTokenAndRefreshToken(user._id)
+  
+
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
+    console.log(loggedInUser)
+
+    const options = {
+        httpOnly: true,
+        secure: true
+    }
+
+    return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+   .json({
+        accessToken,
+        refreshToken,
+        loggedInUser,
+        message:"user successfully loggedIn"
+     })
+
+    }catch(error) {
+        return res.status(400).json({
+            message:"unsuccessfull login"
+        })
+    }
+   }
+
+const logoutUser =async(req,res)=> {
+  await User.findByIdAndUpdate(
+    req.user._id,
+    {
+        $set: {
+            refreshToken: undefined
+        }
+    },
+    {
+        new:true
+    }
+    
+  )
+    const options={
+        httpOnly:true,
+        secure:true
+
+     }
+     return res.status(200)
+     .clearCookie("accessToken",options)
+     .clearCookie("refreshToken",options)
+     .json({
+        message:"user logged out successfully"
+     })
+}
+
+const refreshAccessToken =async(req,res)=> {
+  try {
+      const incomingRefreshToken=req.cookies.refreshToken || req.body.refreshToken
+
+      if(!incomingRefreshToken){
+        return res.status(401).json({message:"unauthorized user"})
+      }
+
+      const  decodedToken= jwt.verify(incomingRefreshToken,REFRESH_TOKEN_SECRET)
+      const user=await User.findOne(decodedToken?._id)
+      if(!user){
+        return res.status(401).json({
+            message:"Invalid refresh token"
+        })
+      }
+
+      if(incomingRefreshToken!==user?.refreshToken){
+         return res.status(401).json({
+            message:"refresh token is expired or used"
+        })
+      }
+
+      const {accessToken,newRefreshToken}=await getAccessTokenAndRefreshToken()
+       
+       const options = {
+            httpOnly: true,
+            secure: true
+        }
+
+          return res
+        .status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", newRefreshToken, options)
+        .json({
+            accessToken,
+            refreshToken:newRefreshToken,
+            message:"access token refresh successfully"
+        })
+      
+  } catch (error) {
+     res.status(401).json({
+        message:"Something went Wrong"
+     })
+  }
+}
+
+export {
+    registerUser,
+    loginUser,
+    logoutUser,
+    refreshAccessToken
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
