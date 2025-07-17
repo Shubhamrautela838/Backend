@@ -5,7 +5,7 @@ import jwt from "jsonwebtoken"
 
 
 
-  const getAccessTokenAndRefreshToken = async(userId) =>{
+const getAccessTokenAndRefreshToken = async(userId) =>{
     try {
         const user = await User.findById(userId)
         const accessToken = user.generateAccessToken()
@@ -246,11 +246,245 @@ const refreshAccessToken =async(req,res)=> {
   }
 }
 
+const changeCurrentPassword= async(req,res)=> {
+    try{
+       const {oldPassword,newPassword}=req.body;
+       const user=await User.findOne(req.user?._id)
+       const isPasswordCorrect=await user.isPasswordCorrect(oldPassword)
+       if(!isPasswordCorrect){
+        return res.status(400).send("Invalid old Password")
+       }
+       user.password=newPassword;
+       await user.save({validateBeforeSave:false})
+
+       return res.status(200).send("Password changed successfully")
+    }
+    catch(error){
+        return res.status(402).send("something went wrong")
+    }
+}
+const getCurrentUser=async(req,res)=> {
+    return res.status(200).json({user:req.user,message:"current user fetcheded successfully"})
+}
+const updateAccountDetails=async(req,res)=> {
+    try{
+    const {email,fullName}=req.body;
+    if(!fullName || !email){
+        return res.status(400).send("All fields arev required")
+    }
+    const user=await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+           $set: { email,
+            fullName}
+        },
+        {new:true}
+
+    ).select("-password")
+
+    return res.status(200).json({user,message:"Account details updated successfully"})
+
+}
+catch(error){
+   return res.status(400).send("something went wrong")
+}
+}
+const updateUserAvatar=async(req,res)=> {
+    try {
+        const avatarLocalPath=req.file?.path
+        if(!avatarLocalPath){
+            return res.status(400).send("Avatar file is missing")
+        }
+        const avatar=await uploadOnCloudinary(avatarLocalPath)
+        if(!avatar.url){
+            return res.status(400).send("Error while uploading on avatar")
+        }
+
+        const user=await User.findByIdAndUpdate(
+            req.user?._id,
+        {
+            $set:{
+                avatar:avatar.url
+            }
+        },
+        {new:true}
+    ).select("-password")
+    return res.status(200).json({user,message:"avatar file updated successfully"})
+
+    } catch (error) {
+        return res.status(401).send("Something Went Wrong")
+    }
+}
+const updateUserCoverImage=async(req,res)=>{
+    try {
+        const CoverImageLocalPath=req.file?.path
+        if(!CoverImageLocalPath){
+            return res.status(400).send("CoverImage file is missing")
+        }
+        const CoverImage=await uploadOnCloudinary(CoverImageLocalPath)
+        if(!CoverImage.url){
+            return res.status(400).send("Error while uploading on CoverImage")
+        }
+
+        const user=await User.findByIdAndUpdate(
+            req.user?._id,
+        {
+            $set:{
+                CoverImage:CoverImage.url
+            }
+        },
+        {new:true}
+    ).select("-password")
+          return res.status(200).json({user,message:"coverImage updated successfully"})
+
+    } catch (error) {
+        return res.status(401).send("Something Went Wrong")
+    }
+}
+
+const getUserChannelProfile =async(req,res)=> {
+try {
+    const {username}=req.params
+    if(!username?.trim()){
+     return res(400).send("username is missing")
+    }
+
+    const channel=User.aggregate([
+       {
+        $match:{
+            username:username?.toLowerCase()
+        }
+       },
+       {
+       $lookup:{
+        from:"subscriptions",
+        localField:"_id",
+        foreignField:"channel",
+        as:"subscribers"
+
+       
+       }
+    },
+      {
+       $lookup:{
+        from:"subscriptions",
+        localField:"_id",
+        foreignField:"subscriber",
+        as:"subscribedTo"
+
+       
+       }
+    },
+     {
+        $addFields:{
+            subscribersCount:{
+                $size:"$subscribers"
+            },
+             channelsSubscribedToCount:{
+                $size:"$subscribedTo"
+            },
+            isSubscribed:{
+                $cond:{
+                    if:{$in:[req.user?._id,"$subscribers.subscriber"]},
+                    then:true,
+                    else:false
+                }
+            }
+        }
+     },
+     {
+        $project:{
+            fullName:1,
+            username:1,
+            subscribersCount:1,
+            channelsSubscribedToCount:1,
+             isSubscribed:1,
+             avatar:1,
+             coverImage:1,
+             email:1
+
+        }
+     }
+    ])
+    if(!channel?.length){
+        return res.status(404).send("channel does not exist")
+    }
+    return res.status(200).send({
+        channel:channel[0],
+        message:"user channel fetched successfully"
+
+    })
+
+} catch (error) {
+    return res.status(404).send("Something went wrong")   
+}
+}
+const getWatchHistory=async(req,res)=> {
+    try {
+        const user= await User.aggregate([
+            {
+                $match:{
+                    _id:new mongoose.Types.ObjectId(req.user._id)
+                }
+            },
+            {
+                $lookup:{
+                    from:"videos",
+                    localField:"watchHistory",
+                    foreignField:"_id",
+                    as:"watchHistory",
+                    pipeline:[
+                        {
+                            $lookup:{
+                                from:"users",
+                                localField:"owner",
+                                foreignField:"_id",
+                                as:"owber",
+                                pipeline:[
+                                    {
+                                        $project:{
+                                            fullName:1,
+                                            username:1,
+                                            avatar:1
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            $addFields:{
+                                owner:{
+                                    $first:"$owner"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+
+        ])
+        return res.status(200).json({
+            user:user[0].watchHistory,
+            message:"watch History fetched successfully"})
+    } catch (error) {
+        
+    }
+}
+
+
 export {
+    
     registerUser,
     loginUser,
     logoutUser,
-    refreshAccessToken
+    refreshAccessToken,
+    changeCurrentPassword,
+     getCurrentUser,
+     updateAccountDetails,
+     updateUserAvatar,
+     updateUserCoverImage,
+     getUserChannelProfile,
+     getWatchHistory
 }
 
 
