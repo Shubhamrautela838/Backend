@@ -25,6 +25,7 @@ const registerUser= async(req,res)=> {
    try{
       const {fullName, email, username, password } = req.body
     console.log("email: ", email);
+    
 
     if (
         [fullName, email, username, password].some((field) => field?.trim() === "")
@@ -37,38 +38,40 @@ const registerUser= async(req,res)=> {
     const existedUser = await User.findOne({
         $or: [{ username }, { email }]
     })
-    
+     
 
     if (existedUser) {
-         res.status(409).json({
+        return  res.status(409).json({
         message:"user with username or email already exist"
        })
     }
-    console.log(req.files);
+   
 
     const avatarLocalPath = req.files?.avatar[0]?.path;
-    console.log(avatarLocalPath)
+     console.log(avatarLocalPath)
     let coverImageLocalPath 
     
 
    if(req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length>0){
     coverImageLocalPath = req.files.coverImage[0].path
    }
+   console.log(coverImageLocalPath)
     
 
     if (!avatarLocalPath) {
-       res.status(401).json({
+       return res.status(401).json({
         message:"avatar file required"
        })
     }
 
     const avatar =await uploadOnCloudinary(avatarLocalPath)
-    console.log(avatar)
+ 
+   
     const coverImage = await uploadOnCloudinary(coverImageLocalPath)
-    console.log(coverImage)
-
+    
+     console.log(coverImage)
     if (!avatar) {
-         res.status(401).json({
+        return  res.status(401).json({
         message:"avatar files required"
        })
     }
@@ -90,13 +93,13 @@ const registerUser= async(req,res)=> {
   
 
     if (!createdUser) {
-         res.status(500).json({
+         return res.status(500).json({
         message:"Something went wrong while registering the user"
        })
     }
 
       
-        res.status(200).json({
+        return res.status(200).json({
             message:"user created succesfully"
         })
     
@@ -105,7 +108,7 @@ const registerUser= async(req,res)=> {
       
    }
    catch(error){
-    console.log(error)
+    
         res.status(400)
         .json(
             {message:"something went wrong"}
@@ -178,8 +181,8 @@ const logoutUser =async(req,res)=> {
   await User.findByIdAndUpdate(
     req.user._id,
     {
-        $set: {
-            refreshToken: undefined
+        $unset: {
+            refreshToken: 1
         }
     },
     {
@@ -309,6 +312,7 @@ const updateUserAvatar=async(req,res)=> {
         },
         {new:true}
     ).select("-password")
+
     return res.status(200).json({user,message:"avatar file updated successfully"})
 
     } catch (error) {
@@ -421,53 +425,55 @@ try {
 }
 const getWatchHistory=async(req,res)=> {
     try {
-        const user= await User.aggregate([
-            {
-                $match:{
-                    _id:new mongoose.Types.ObjectId(req.user._id)
-                }
-            },
-            {
-                $lookup:{
-                    from:"videos",
-                    localField:"watchHistory",
-                    foreignField:"_id",
-                    as:"watchHistory",
-                    pipeline:[
-                        {
-                            $lookup:{
-                                from:"users",
-                                localField:"owner",
-                                foreignField:"_id",
-                                as:"owber",
-                                pipeline:[
-                                    {
-                                        $project:{
-                                            fullName:1,
-                                            username:1,
-                                            avatar:1
-                                        }
+        console.log("hii")
+         const user = await User.aggregate([
+        {
+            $match: {
+                _id: new mongoose.Types.ObjectId(req.user._id)
+            }
+        },
+        {
+            $lookup: {
+                from: "videos",
+                localField: "watchHistory",
+                foreignField: "_id",
+                as: "watchHistory",
+                pipeline: [
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "owner",
+                            foreignField: "_id",
+                            as: "owner",
+                            pipeline: [
+                                {
+                                    $project: {
+                                        fullName: 1,
+                                        username: 1,
+                                        avatar: 1
                                     }
-                                ]
-                            }
-                        },
-                        {
-                            $addFields:{
-                                owner:{
-                                    $first:"$owner"
                                 }
+                            ]
+                        }
+                    },
+                    {
+                        $addFields:{
+                            owner:{
+                                $first: "$owner"
                             }
                         }
-                    ]
-                }
+                    }
+                ]
             }
-
-        ])
-        return res.status(200).json({
-            user:user[0].watchHistory,
-            message:"watch History fetched successfully"})
+        }
+    ])
+    console.log(user)
+    return res.status(200).json({
+        user:user[0].watchHistory,
+        message:"success"
+    })
     } catch (error) {
-        
+        return res.status(400).send("something went wrong")
     }
 }
 
