@@ -4,13 +4,33 @@ import {Video} from "../models/video.model.js"
 
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 
+const getAllVideosByOwner = async (req, res) => {
+  try {
+    const { ownerId } = req.params;
 
+    if (!ownerId || !isValidObjectId(ownerId)) {
+      return res.status(400).json({ message: "Invalid owner id" });
+    }
 
+    const videos = await Video.find({ owner: ownerId, isPublished: true });
 
+    return res.status(200).json({
+      success: true,
+      data: videos,
+      message: "Videos fetched successfully"
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message
+    });
+  }
+};
 const publishAVideo = async (req, res) => {
     try{
     const { title, description} = req.body
-    
+    console.log(title)
 
       if (
         [title,description].some((field) => field?.trim() === "")
@@ -154,12 +174,39 @@ const updateVideo = async (req, res) => {
     return res.status(500).send("Something went wrong");
   }
 };
+const deleteVideo = async (req, res) => {
+  try{
+   const { id} = req.params;
+   
+    if(!id){ 
+        return res.status(400).send("id not exist")
+     } 
+    const video=await Video.findById(id)
+    
+
+    if (!video) {
+      return res.status(400).send("video does not exist");
+    }
+
+    if (req.user?._id != video.owner.toString()) {
+      return res.status(403).send("unauthorized user");
+    }
+     await Video.findByIdAndDelete(id);
+     return res.status(200).send("video deleted successfully");
+   
+}
+catch(error){
+  return res.status(400).send("Something went wrong")
+}
+}
 
 
 export {
    
     publishAVideo,
     getVideoById,
-    updateVideo
+    updateVideo,
+    deleteVideo,
+    getAllVideosByOwner
   
 }

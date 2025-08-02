@@ -3,7 +3,8 @@ import {
    
     getVideoById,
     publishAVideo,
-   updateVideo
+   updateVideo,deleteVideo,
+   getAllVideosByOwner
   
 } from "../controllers/video.controllers.js"
 import {verifyJWT} from "../middlewares/auth.middleware.js"
@@ -33,6 +34,8 @@ router
                 name: "thumbnail",
                 maxCount: 1,
             }]),updateVideo);
+    router.route("/deletevideo/:id").delete(verifyJWT,deleteVideo);
+    router.route("/owner/:ownerId").get(getAllVideosByOwner);
 
 
 
